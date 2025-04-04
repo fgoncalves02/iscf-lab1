@@ -1,103 +1,180 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import { db, ref, set, onValue } from "@/config/firebase"; // ajuste o caminho conforme necessário
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+
+// Define a interface dos dados do sensor
+interface SensorData {
+  id: string;
+  timestamp: number; // Unix timestamp em segundos
+  temperature: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
+const Dashboard = () => {
+  // Estado para a frequência de extração e dados dos sensores
+  const [extractionFreq, setExtractionFreq] = useState<number>(1);
+  const [sensorData, setSensorData] = useState<SensorData[]>([]);
+  // Estado para o tamanho da janela (em segundos)
+  const [windowSize, setWindowSize] = useState<number>(60); // valor padrão: 1 minuto
+
+  // Buscar a frequência de extração e os dados do acelerómetro na montagem do componente
+  useEffect(() => {
+    const extractionFreqRef = ref(db, "extraction_freq");
+    const unsubscribeFreq = onValue(extractionFreqRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null) {
+        setExtractionFreq(data);
+      }
+    });
+
+    const accelRef = ref(db, "accelerometer_data");
+    const unsubscribeData = onValue(accelRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const dataArray: SensorData[] = Object.entries(data).map(([id, value]) => ({
+          id,
+          ...(value as Omit<SensorData, "id">),
+        }));
+        setSensorData(dataArray);
+      }
+    });
+
+    // Limpar os listeners ao desmontar
+    return () => {
+      unsubscribeFreq();
+      unsubscribeData();
+    };
+  }, []);
+
+  // Ordena os dados por timestamp (crescente)
+  const sortedData = [...sensorData].sort((a, b) => a.timestamp - b.timestamp);
+
+  // Filtra os dados com base no windowSize selecionado
+  const currentTime = Date.now() / 1000; // tempo atual em segundos
+  const filteredData = sortedData.filter(item => item.timestamp >= (currentTime - windowSize));
+
+  // Prepara os dados para os gráficos (formato adequado para Recharts)
+  const chartData = filteredData.map(item => ({
+    time: new Date(item.timestamp * 1000).toLocaleTimeString(),
+    x: item.x,
+    y: item.y,
+    z: item.z,
+    temperature: item.temperature,
+  }));
+
+  // Função para atualizar a frequência de extração no Firebase
+  const updateExtractionFreq = async (seconds: number) => {
+    setExtractionFreq(seconds);
+    try {
+      await set(ref(db, "extraction_freq"), seconds);
+      console.log("Extraction frequency updated to:", seconds, "seconds");
+    } catch (error) {
+      console.error("Error updating extraction frequency:", error);
+    }
+  };
+
+  // Função para atualizar o tamanho da janela
+  const updateWindowSize = (seconds: number) => {
+    setWindowSize(seconds);
+  };
+
+  // Opções para a frequência de extração e para o tamanho da janela (em segundos)
+  const freqOptions = [1, 2, 3, 5, 10];
+  const windowOptions: { label: string; value: number }[] = [
+    { label: "1 min", value: 60 },
+    { label: "2 min", value: 120 },
+    { label: "5 min", value: 300 },
+    { label: "10 min", value: 600 },
+    { label: "30 min", value: 1800 },
+    { label: "1 hora", value: 3600 },
+    { label: "1 dia", value: 86400 },
+    { label: "1 semana", value: 604800 },
+  ];
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div style={{ padding: "1rem" }}>
+      <h2>Set Extraction Frequency</h2>
+      <div style={{ marginBottom: "1rem" }}>
+        {freqOptions.map((sec) => (
+          <button
+            key={sec}
+            onClick={() => updateExtractionFreq(sec)}
+            style={{
+              backgroundColor: extractionFreq === sec ? "#4caf50" : "#2196f3",
+              color: "white",
+              border: "none",
+              padding: "0.5rem 1rem",
+              marginRight: "0.5rem",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            {sec} s
+          </button>
+        ))}
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      <h2>Set Window Size</h2>
+      <div style={{ marginBottom: "1rem" }}>
+        {windowOptions.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => updateWindowSize(option.value)}
+            style={{
+              backgroundColor: windowSize === option.value ? "#4caf50" : "#2196f3",
+              color: "white",
+              border: "none",
+              padding: "0.5rem 1rem",
+              marginRight: "0.5rem",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <h2>Accelerometer Data (X, Y, Z vs Time)</h2>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="time" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Line type="monotone" dataKey="x" stroke="red" dot={false} />
+          <Line type="monotone" dataKey="y" stroke="green" dot={false} />
+          <Line type="monotone" dataKey="z" stroke="blue" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+
+      <h2 style={{ marginTop: "2rem" }}>Temperature Data vs Time</h2>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="time" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Line type="monotone" dataKey="temperature" stroke="orange" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
-}
+};
+
+export default Dashboard;
