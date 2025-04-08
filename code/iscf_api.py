@@ -17,7 +17,6 @@ class Sensors(BaseModel):
     y: float 
     z: float 
     timestamp: float
-    temperature: float
 
 
 @app.get("/")
@@ -33,9 +32,39 @@ async def getData():
 @app.post("/data")
 async def postData(data: Sensors):
     logging.debug(f"posdata: {data}")
-    new_data.append(data)
-    firebase_api.save_accelerometer_data(data.dict())
+    
+    temp = weather_api.get_temperature()
+    accel_and_temp = data.model_dump()  #Substitui o .dict() do Pydantic v1.  Converte o modelo Pydantic em dict.
+
+    accel_and_temp["temperature"] = temp
+
+    new_data.append(accel_and_temp)
+    firebase_api.save_accelerometer_data(accel_and_temp)
+    logging.debug(f"accel_and_temp: {accel_and_temp}")
     return {"message": "Data added successfully"}
+
+
+@app.get("/extraction_freq")
+async def get_frequency():
+    """Endpoint to get the current extraction_frequency"""
+    return firebase_api.get_extraction_freq()
+
+@app.get("/emergency_stop")
+async def get_emergency():
+    """Endpoint to get the current emergency_stop"""
+    return firebase_api.get_emergency_stop()
+
+@app.post("/emergency_stop")
+async def get_emergency():
+    """Endpoint to post new emergency_stop value"""
+    return firebase_api.save_emergency_stop()
+
+
+
+@app.get("/temperature")
+def get_temperature():
+    """Endpoint to get the current temperature for a city"""
+    return weather_api.get_temperature()
 
 
 @app.get("/weather")
