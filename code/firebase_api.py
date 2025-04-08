@@ -20,7 +20,7 @@ class FirebaseAPI:
             )
             response.raise_for_status()
 
-            logging.info(f"Data successfully posted to {endpoint}: {response.json()}")
+            logging.debug(f"Data successfully posted to {endpoint}: {response.json()}")
             return response.json()
         
         except requests.exceptions.Timeout:
@@ -85,11 +85,23 @@ class FirebaseAPI:
         Retrieves all records stored in "/extraction_freq".
         """
         return self._get("extraction_freq")
+    
+    def save_emergency_stop(self, emergency_stop):
+        """
+        Saves a new record to Firebase at "/emergency_stop".
+        """
+        return self._post("emergency_stop", emergency_stop)
+
+    def get_emergency_stop(self):
+        """
+        Retrieves all records stored in "/emergency_stop".
+        """
+        return self._get("emergency_stop")
 
 
 if __name__ == "__main__":
     firebase_api = FirebaseAPI()
     
     
-    print(firebase_api.get_extraction_freq())
+    print(firebase_api.get_emergency_stop())
     #print(firebase_api.get_data_by_id("-OMbsJLYHKeL0w3zZL_W"))
