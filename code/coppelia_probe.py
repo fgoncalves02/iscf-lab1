@@ -41,21 +41,22 @@ class DataCollection():
 
         self.open_weather = OpenWeatherAPI()
         self.firebase = FirebaseAPI()
-
-        self.extraction_freq =1
-
+        self.extraction_freq = None
+        self.emergency_stop = None
         self.accel_data = {
                         "x": None,
                         "y": None,
                         "z": None,
                         "timestamp": None,
-                        "temperature": None
                         }
+        
+        self.listener_thread = threading.Thread(target=self.firebase_monitor, daemon=True)
+        self.listener_thread.start()
         
         
     def send_data(self, data):
         """
-        
+             Sends data to API using an HTTP POST request.
         """
         try:
             logging.debug(f"Sending data: {data}")
@@ -70,16 +71,31 @@ class DataCollection():
             logging.error(f"Failed to send data: {e}")
 
 
-    def firebase_listener(self):
+    def firebase_monitor(self):
         """
-        Função que roda em uma thread separada para atualizar
-        o valor da extração a partir do Firebase.
+        Monitora o Firebase para atualizar os valores de extraction_freq e emergency_stop.
+        Executa uma consulta a cada 5 segundos.
         """
         while True:
-            freq = self.firebase.get_extraction_freq()
-            if freq is not None:
-                self.extraction_freq = freq
-            # Consulta a cada 5 segundo 
+            try:
+                freq_response = requests.get(f"{API_URL}/extraction_freq/")
+                if freq_response.status_code == 200:
+                    self.extraction_freq = freq_response.json()
+                    logging.debug(f"Updated extraction frequency: {self.extraction_freq}")
+                else:
+                    logging.error(f"Error getting extraction frequency: {freq_response.status_code}, Response: {freq_response.text}")
+                
+                emergency_response = requests.get(f"{API_URL}/emergency_stop/")
+                if emergency_response.status_code == 200:
+                    self.emergency_stop = emergency_response.json()
+                    logging.debug(f"Updated emergency stop: {self.emergency_stop}")
+                else:
+                    logging.error(f"Error getting emergency stop: {emergency_response.status_code}, Response: {emergency_response.text}")
+
+            except Exception as e:
+                logging.error(f"Error during update: {e}")
+            
+            # Consulta a cada 5 segundos
             time.sleep(5)
 
 
@@ -87,10 +103,27 @@ class DataCollection():
     def run(self):
         
         while True:   
-            listener_thread = threading.Thread(target=self.firebase_listener, daemon=True)
-            listener_thread.start()
 
             #extraction_freq = self.firebase.get_extraction_freq()
+            logging.debug(f"emergency_stop {self.emergency_stop}")
+            if self.emergency_stop == 1:
+                logging.warning("Emergency Stop activated. Pausing simulation.")
+                try:
+                    sim.simxPauseSimulation(clientID, sim.simx_opmode_blocking)
+                    logging.info("-----------SIMULATION PAUSE-----------------")
+                except Exception as pause_error:
+                    logging.error(f"Error pausing simulation: {pause_error}")
+
+                while self.emergency_stop == 1:
+                    logging.debug("******************LOOOP INFINITO")
+                    time.sleep(1)
+
+                try:
+                    sim.simxStartSimulation(clientID, sim.simx_opmode_blocking)
+                    logging.info("-----------SIMULATION RESUME-----------------")
+                except Exception as start_error:
+                    logging.error(f"Error starting simulation: {start_error}")
+
 
             x = get_data_from_simulation("accelX")            
             y = get_data_from_simulation("accelY")
@@ -103,7 +136,6 @@ class DataCollection():
                 self.accel_data["y"] = y
                 self.accel_data["z"] = z
                 self.accel_data["timestamp"] = time.time()
-                self.accel_data["temperature"] = self.open_weather.get_temperature()
 
                 logging.info(f"Collected data: {self.accel_data}")
 
