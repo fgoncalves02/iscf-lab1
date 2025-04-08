@@ -37,8 +37,8 @@ const Dashboard = () => {
   const [sensorData, setSensorData] = useState<SensorData[]>([]);
   const [windowSize, setWindowSize] = useState<number>(60);
   const [reportInterval, setReportInterval] = useState<number>(0);
-  
-  // Atualizamos o tipo para aceitar number ou null  
+
+  // Estado para os inputs de intervalos: aceita number ou null  
   const [customTime, setCustomTime] = useState<{ days: number | null; hours: number | null; minutes: number | null; }>({
     days: null,
     hours: null,
@@ -214,6 +214,24 @@ const Dashboard = () => {
     setWindowSize(60);
   };
 
+  const emergencyStop = async () => {
+    try {
+      await set(ref(db, "emergency_stop"), 1);
+      console.log("Emergency stop activated.");
+    } catch (error) {
+      console.error("Error activating emergency stop:", error);
+    }
+  };
+
+  const resumeSystem = async () => {
+    try {
+      await set(ref(db, "emergency_stop"), 0);
+      console.log("System resumed.");
+    } catch (error) {
+      console.error("Error resuming system:", error);
+    }
+  };
+
   const freqOptions = [1, 2, 3, 5, 10];
   const windowOptions = [
     { label: "1 min", value: 60 },
@@ -250,6 +268,35 @@ const Dashboard = () => {
 
   return (
     <div style={{ padding: "1rem" }}>
+       <div style={{ position: "fixed", top: "20px", right: "20px", display: "flex", gap: "0.5rem", zIndex: 1000 }}>
+        <button
+          onClick={emergencyStop}
+          style={{
+            backgroundColor: "red",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            padding: "0.5rem 1rem",
+            cursor: "pointer",
+          }}
+        >
+          Emergency Stop
+        </button>
+        <button
+          onClick={resumeSystem}
+          style={{
+            backgroundColor: "green",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            padding: "0.5rem 1rem",
+            cursor: "pointer",
+          }}
+        >
+          Resume
+        </button>
+      </div>
+
       <h2>Set Extraction Frequency</h2>
       <div style={{ marginBottom: "1rem" }}>
         {freqOptions.map((sec) => (
@@ -257,8 +304,7 @@ const Dashboard = () => {
             key={sec}
             onClick={() => updateExtractionFreq(sec)}
             style={{
-              backgroundColor:
-                extractionFreq === sec ? "#4caf50" : "#2196f3",
+              backgroundColor: extractionFreq === sec ? "#4caf50" : "#2196f3",
               color: "white",
               border: "none",
               padding: "0.5rem 1rem",
