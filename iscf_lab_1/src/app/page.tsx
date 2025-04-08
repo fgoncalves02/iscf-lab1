@@ -36,8 +36,14 @@ const Dashboard = () => {
   const [extractionFreq, setExtractionFreq] = useState<number>(1);
   const [sensorData, setSensorData] = useState<SensorData[]>([]);
   const [windowSize, setWindowSize] = useState<number>(60);
-  const [reportInterval, setReportInterval] = useState<number>(604800);
-  const [customTime, setCustomTime] = useState({ days: 0, hours: 0, minutes: 0 });
+  const [reportInterval, setReportInterval] = useState<number>(0);
+  
+  // Atualizamos o tipo para aceitar number ou null  
+  const [customTime, setCustomTime] = useState<{ days: number | null; hours: number | null; minutes: number | null; }>({
+    days: null,
+    hours: null,
+    minutes: null,
+  });
 
   const accelChartRef = useRef<HTMLDivElement>(null);
   const tempChartRef = useRef<HTMLDivElement>(null);
@@ -53,10 +59,12 @@ const Dashboard = () => {
     const unsubscribeData = onValue(accelRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const dataArray: SensorData[] = Object.entries(data).map(([id, value]) => ({
-          id,
-          ...(value as Omit<SensorData, "id">),
-        }));
+        const dataArray: SensorData[] = Object.entries(data).map(
+          ([id, value]) => ({
+            id,
+            ...(value as Omit<SensorData, "id">),
+          })
+        );
         setSensorData(dataArray);
       }
     });
@@ -109,8 +117,10 @@ const Dashboard = () => {
     const reportData =
       reportInterval === -1
         ? sortedData
-        : sortedData.filter((item) => item.timestamp >= currentTime - reportInterval);
-    
+        : sortedData.filter(
+            (item) => item.timestamp >= currentTime - reportInterval
+          );
+
     if (reportData.length === 0) {
       alert("No data available for the selected interval.");
       return;
@@ -131,7 +141,11 @@ const Dashboard = () => {
     doc.text("Sensor Report", 10, 15);
     doc.setFontSize(10);
     doc.text(
-      `Interval: ${reportInterval === -1 ? "All Time" : `${(reportInterval / 60).toFixed(0)} minutes`}`,
+      `Last: ${
+        reportInterval === -1
+          ? "All Time"
+          : `${(reportInterval / 60).toFixed(0)} minutes`
+      }`,
       10,
       25
     );
@@ -143,25 +157,33 @@ const Dashboard = () => {
     yPos += 8;
     doc.setFontSize(10);
     doc.text(
-      `Temperature: Avg = ${tempStats.avg.toFixed(2)}°C, Min = ${tempStats.min}°C, Max = ${tempStats.max}°C`,
+      `Temperature: Avg = ${tempStats.avg.toFixed(
+        2
+      )}°C, Min = ${tempStats.min}°C, Max = ${tempStats.max}°C`,
       10,
       yPos
     );
     yPos += 6;
     doc.text(
-      `Accelerometer X: Avg = ${xStats.avg.toFixed(2)}, Min = ${xStats.min}, Max = ${xStats.max}`,
+      `Accelerometer X: Avg = ${xStats.avg.toFixed(
+        2
+      )}, Min = ${xStats.min}, Max = ${xStats.max}`,
       10,
       yPos
     );
     yPos += 6;
     doc.text(
-      `Accelerometer Y: Avg = ${yStats.avg.toFixed(2)}, Min = ${yStats.min}, Max = ${yStats.max}`,
+      `Accelerometer Y: Avg = ${yStats.avg.toFixed(
+        2
+      )}, Min = ${yStats.min}, Max = ${yStats.max}`,
       10,
       yPos
     );
     yPos += 6;
     doc.text(
-      `Accelerometer Z: Avg = ${zStats.avg.toFixed(2)}, Min = ${zStats.min}, Max = ${zStats.max}`,
+      `Accelerometer Z: Avg = ${zStats.avg.toFixed(
+        2
+      )}, Min = ${zStats.min}, Max = ${zStats.max}`,
       10,
       yPos
     );
@@ -186,10 +208,10 @@ const Dashboard = () => {
 
     doc.save("sensor_report.pdf");
 
-    // Reset custom time values after PDF generation
-    setCustomTime({ days: 0, hours: 0, minutes: 0 });
-    setReportInterval(0); // Reset the report interval to 0
-    setWindowSize(60); // Reset the window size (this will ensure consistency between the report interval and window size)
+    // Após gerar o PDF, reseta os valores dos campos para null
+    setCustomTime({ days: null, hours: null, minutes: null });
+    setReportInterval(0);
+    setWindowSize(60);
   };
 
   const freqOptions = [1, 2, 3, 5, 10];
@@ -204,12 +226,19 @@ const Dashboard = () => {
     { label: "1 week", value: 604800 },
   ];
 
-  const handleReportIntervalChange = (unit: "days" | "hours" | "minutes", value: number) => {
+  const handleReportIntervalChange = (
+    unit: "days" | "hours" | "minutes",
+    value: number | null
+  ) => {
+    // Atualiza o estado usando o valor ou null se o campo for apagado
     const updated = { ...customTime, [unit]: value };
     setCustomTime(updated);
-    const totalSeconds = updated.days * 86400 + updated.hours * 3600 + updated.minutes * 60;
+    const totalSeconds =
+      (updated.days ?? 0) * 86400 +
+      (updated.hours ?? 0) * 3600 +
+      (updated.minutes ?? 0) * 60;
     setReportInterval(totalSeconds);
-    setWindowSize(totalSeconds); // Sync windowSize to match reportInterval
+    setWindowSize(totalSeconds);
   };
 
   const humanReadableWindowSize = () => {
@@ -228,7 +257,8 @@ const Dashboard = () => {
             key={sec}
             onClick={() => updateExtractionFreq(sec)}
             style={{
-              backgroundColor: extractionFreq === sec ? "#4caf50" : "#2196f3",
+              backgroundColor:
+                extractionFreq === sec ? "#4caf50" : "#2196f3",
               color: "white",
               border: "none",
               padding: "0.5rem 1rem",
@@ -252,7 +282,8 @@ const Dashboard = () => {
             key={option.value}
             onClick={() => updateWindowSize(option.value)}
             style={{
-              backgroundColor: windowSize === option.value ? "#4caf50" : "#2196f3",
+              backgroundColor:
+                windowSize === option.value ? "#4caf50" : "#2196f3",
               color: "white",
               border: "none",
               padding: "0.5rem 1rem",
@@ -267,27 +298,53 @@ const Dashboard = () => {
       </div>
 
       <h2>Generate PDF Report</h2>
-      <div style={{ marginBottom: "1rem", display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
+      <div
+        style={{
+          marginBottom: "1rem",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "1rem",
+          alignItems: "center",
+        }}
+      >
         <label style={{ fontWeight: "bold" }}>Report Interval:</label>
         <input
           type="number"
           placeholder="Days"
           min={0}
-          onChange={(e) => handleReportIntervalChange("days", Number(e.target.value))}
+          value={customTime.days ?? ""}
+          onChange={(e) =>
+            handleReportIntervalChange(
+              "days",
+              e.target.value ? Number(e.target.value) : null
+            )
+          }
           style={{ width: "70px", padding: "0.5rem" }}
         />
         <input
           type="number"
           placeholder="Hours"
           min={0}
-          onChange={(e) => handleReportIntervalChange("hours", Number(e.target.value))}
+          value={customTime.hours ?? ""}
+          onChange={(e) =>
+            handleReportIntervalChange(
+              "hours",
+              e.target.value ? Number(e.target.value) : null
+            )
+          }
           style={{ width: "70px", padding: "0.5rem" }}
         />
         <input
           type="number"
           placeholder="Minutes"
           min={0}
-          onChange={(e) => handleReportIntervalChange("minutes", Number(e.target.value))}
+          value={customTime.minutes ?? ""}
+          onChange={(e) =>
+            handleReportIntervalChange(
+              "minutes",
+              e.target.value ? Number(e.target.value) : null
+            )
+          }
           style={{ width: "80px", padding: "0.5rem" }}
         />
         <button
@@ -306,8 +363,11 @@ const Dashboard = () => {
         </button>
       </div>
 
-      <h2>Accelerometer Data (X, Y, Z vs Time)</h2>
-      <div ref={accelChartRef} style={{ backgroundColor: "#f0f0f0", padding: "1rem", borderRadius: "8px" }}>
+      <h2>Accelerometer Data (X, Y, Z) vs Time</h2>
+      <div
+        ref={accelChartRef}
+        style={{ backgroundColor: "#f0f0f0", padding: "1rem", borderRadius: "8px" }}
+      >
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
@@ -323,7 +383,10 @@ const Dashboard = () => {
       </div>
 
       <h2 style={{ marginTop: "2rem" }}>Temperature Data vs Time</h2>
-      <div ref={tempChartRef} style={{ backgroundColor: "#f0f0f0", padding: "1rem", borderRadius: "8px" }}>
+      <div
+        ref={tempChartRef}
+        style={{ backgroundColor: "#f0f0f0", padding: "1rem", borderRadius: "8px" }}
+      >
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
